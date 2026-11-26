@@ -31,6 +31,12 @@ export async function deliverB50Reply(options: DeliverB50Options): Promise<void>
   const mode: ImageMode = options.forceText ? "text" : options.instance.imageMode;
   const summary = formatB50Summary(options.b50, options.syncNote);
 
+  if (mode === "custom" && options.b50.customImageKey) {
+    if (await trySendStoredImage(options, options.b50.customImageKey, summary, "custom")) {
+      return;
+    }
+  }
+
   if (mode === "custom" && options.customRenderer) {
     try {
       const rendered = await options.customRenderer.render(options.b50, options.instance);
@@ -54,20 +60,8 @@ export async function deliverB50Reply(options: DeliverB50Options): Promise<void>
   }
 
   if (mode !== "text" && options.b50.potentialImageKey) {
-    try {
-      const fileInfo = await uploadOfficialB50Image(options, options.b50.potentialImageKey);
-      if (fileInfo) {
-        await options.qq.sendC2CMessage(options.bot, options.openid, {
-          msgType: 7,
-          media: { file_info: fileInfo },
-          content: summary,
-          msgId: options.msgId,
-          msgSeq: options.nextSeq(),
-        });
-        return;
-      }
-    } catch (error) {
-      console.warn("[gateway] official B50 image upload failed, falling back to text:", error);
+    if (await trySendStoredImage(options, options.b50.potentialImageKey, summary, "official")) {
+      return;
     }
   }
 
@@ -79,7 +73,30 @@ export async function deliverB50Reply(options: DeliverB50Options): Promise<void>
   });
 }
 
-async function uploadOfficialB50Image(options: DeliverB50Options, key: string): Promise<string | null> {
+async function trySendStoredImage(
+  options: DeliverB50Options,
+  key: string,
+  summary: string,
+  kind: "custom" | "official",
+): Promise<boolean> {
+  try {
+    const fileInfo = await uploadB50Image(options, key);
+    if (!fileInfo) return false;
+    await options.qq.sendC2CMessage(options.bot, options.openid, {
+      msgType: 7,
+      media: { file_info: fileInfo },
+      content: summary,
+      msgId: options.msgId,
+      msgSeq: options.nextSeq(),
+    });
+    return true;
+  } catch (error) {
+    console.warn(`[gateway] ${kind} B50 image upload failed, falling back:`, error);
+    return false;
+  }
+}
+
+async function uploadB50Image(options: DeliverB50Options, key: string): Promise<string | null> {
   if (options.config.publicBaseUrl) {
     const token = options.mediaSigner.sign(options.instance.id, key);
     const url = `${options.config.publicBaseUrl}/qq/media/${token}`;

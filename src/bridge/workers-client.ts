@@ -16,6 +16,9 @@ export interface BotB50Payload {
   weightedPotential: number;
   mediaStatus: "processing" | "complete" | "failed";
   potentialImageKey: string | null;
+  customImageKey?: string | null;
+  customImageTheme?: "dark" | "light" | null;
+  customBackgroundId?: string | null;
   user: {
     name: string | null;
     userCode: string | null;
@@ -92,8 +95,11 @@ export class WorkersBridgeClient {
     return this.requestJson<BotJobPayload>(instance, `/api/bot/jobs/${encodeURIComponent(jobId)}`);
   }
 
-  async getB50(instance: InstanceRecord) {
-    return this.requestJson<BotB50Payload>(instance, "/api/bot/b50");
+  async getB50(instance: InstanceRecord, options: { ensureCustom?: boolean } = {}) {
+    const query = options.ensureCustom ? "?ensureCustom=1" : "";
+    return this.requestJson<BotB50Payload>(instance, `/api/bot/b50${query}`, {
+      signal: AbortSignal.timeout(options.ensureCustom ? 45_000 : JSON_TIMEOUT_MS),
+    });
   }
 
   async fetchMedia(instance: InstanceRecord, key: string): Promise<{ body: ArrayBuffer; contentType: string }> {

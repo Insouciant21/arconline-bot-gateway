@@ -158,7 +158,9 @@ export class CommandDispatcher {
     });
 
     try {
-      const b50 = await this.deps.bridge.getB50(instance);
+      const b50 = await this.deps.bridge.getB50(instance, {
+        ensureCustom: !forceText && instance.imageMode === "custom",
+      });
       await deliverB50Reply({
         bot,
         openid,

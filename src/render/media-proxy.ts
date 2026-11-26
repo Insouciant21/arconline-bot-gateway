@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import { constantTimeEqual } from "../crypto/aes.js";
 
 const MEDIA_TOKEN_TTL_MS = 5 * 60 * 1000;
-const ALLOWED_KEY_PREFIX = /^(charts|characters|potential|banners)\//;
+const ALLOWED_KEY_PREFIX = /^(charts|characters|potential|banners|custom)\//;
 
 export interface MediaTokenPayload {
   instanceId: string;

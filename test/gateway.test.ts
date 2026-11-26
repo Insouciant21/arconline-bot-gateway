@@ -49,6 +49,7 @@ function b50Fixture(id = "snap-01") {
     weightedPotential: 12.654321,
     mediaStatus: "complete",
     potentialImageKey: `potential/${id}.image`,
+    customImageKey: `custom/${id}-bg-12-abc123.jpg`,
     user: { name: "Hikari", userCode: "123456789", rating: 12.654 },
     stats: {
       top10Sum: 129.5,
@@ -387,6 +388,28 @@ describe("gateway multi-bot & multi-instance routing", () => {
     expect(sentQqCalls[1].body.msg_type).toBe(7);
     expect(sentQqCalls[1].body.content).toContain("Lowiro 维护中");
     expect(sentQqCalls[1].body.content).toContain("已回退发送最近一次缓存 B50");
+  });
+
+  it("delivers pre-rendered custom B50 image and requests ensureCustom=1 when imageMode is custom", async () => {
+    const { app, repo, sentQqCalls, bridgeCalls, flushBackground } = setupGateway({ syncBehavior: "unchanged" });
+    repo.upsertBot({ id: "bot-c", appId: "1002", clientSecret: "secret-c" });
+    repo.upsertInstance({ id: "alice", baseUrl: "https://alice.workers.dev", bridgeSecret: "alice-secret", imageMode: "custom" });
+    repo.setBinding("bot-c", "c2c", "user-1", "alice");
+
+    await app.request(makeSignedWebhookRequest("bot-c", "secret-c", {
+      op: 0,
+      id: "evt-b50-custom",
+      t: "C2C_MESSAGE_CREATE",
+      d: { id: "msg-custom", content: "/b50", timestamp: "2026-11-27T01:03:00Z", author: { user_openid: "user-1" } },
+    }));
+    await flushBackground();
+
+    expect(bridgeCalls.some((call) => call.url.endsWith("/api/bot/b50?ensureCustom=1"))).toBe(true);
+    expect(sentQqCalls).toHaveLength(2);
+    const proxyPath = new URL(sentQqCalls[0].body.url as string).pathname;
+    const mediaRes = await app.request(proxyPath);
+    expect(mediaRes.status).toBe(200);
+    expect(sentQqCalls[1].body.msg_type).toBe(7);
   });
 
   it("serves /admin UI, supports cookie login/logout, patch, and instance connectivity check", async () => {
