@@ -25,7 +25,7 @@ function makeSignedWebhookRequest(
   botId: string,
   botSecret: string,
   payload: unknown,
-  timestamp = "1732640000",
+  timestamp = String(Math.floor(Date.now() / 1000)),
 ) {
   const rawBody = JSON.stringify(payload);
   const { privateKey } = deriveEd25519Keys(botSecret);
@@ -223,12 +223,29 @@ describe("gateway multi-bot & multi-instance routing", () => {
     const validationRes = await app.request(new Request("http://localhost/qq/webhook/bot-a", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ op: 13, d: { plain_token: "abc", event_ts: "170000" } }),
+      body: JSON.stringify({ op: 13, d: { plain_token: "abc_123-XYZ", event_ts: "1700000000" } }),
     }));
     expect(validationRes.status).toBe(200);
     const validationBody = await validationRes.json() as { plain_token: string; signature: string };
-    expect(validationBody.plain_token).toBe("abc");
-    expect(verifyWebhookSignature("secret-a", "170000", validationBody.signature, "abc")).toBe(true);
+    expect(validationBody.plain_token).toBe("abc_123-XYZ");
+    expect(verifyWebhookSignature("secret-a", "1700000000", validationBody.signature, "abc_123-XYZ")).toBe(true);
+
+    // Reject JSON-shaped plain_token so op=13 cannot act as a signing oracle for op=0 forgery.
+    const oracleAttempt = await app.request(new Request("http://localhost/qq/webhook/bot-a", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ op: 13, d: { plain_token: "{\"op\":0}", event_ts: "1700000000" } }),
+    }));
+    expect(oracleAttempt.status).toBe(400);
+
+    // Reject stale timestamps (> 5 min old) even with valid signature.
+    const staleRes = await app.request(makeSignedWebhookRequest(
+      "bot-a",
+      "secret-a",
+      { op: 0, id: "evt-stale", t: "C2C_MESSAGE_CREATE", d: {} },
+      "1700000000",
+    ));
+    expect(staleRes.status).toBe(401);
 
     const badSigRes = await app.request(new Request("http://localhost/qq/webhook/bot-a", {
       method: "POST",
@@ -448,8 +465,28 @@ describe("gateway multi-bot & multi-instance routing", () => {
     });
     expect(badOriginPatch.status).toBe(403);
 
+    // SSRF guard rejects non-https, loopback, private IP, and single-label Docker service URLs.
+    for (const badUrl of ["http://alice.workers.dev", "https://127.0.0.1:8787", "https://localhost", "https://1panel-postgresql-hotp"]) {
+      const ssrfRes = await app.request("/admin/instances", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ baseUrl: badUrl, bridgeSecret: "s" }),
+      });
+      expect(ssrfRes.status).toBe(400);
+    }
+
+    const badOriginLogout = await app.request("/admin/logout", {
+      method: "POST",
+      headers: { cookie, origin: "https://evil.example" },
+    });
+    expect(badOriginLogout.status).toBe(403);
+
     const logoutRes = await app.request("/admin/logout", { method: "POST", headers: { cookie } });
     expect(logoutRes.status).toBe(200);
     expect(logoutRes.headers.get("set-cookie")).toContain("Max-Age=0");
+
+    // Reusing the revoked cookie must fail server-side.
+    const afterLogout = await app.request("/admin/session", { headers: { cookie } });
+    expect(afterLogout.status).toBe(401);
   });
 });

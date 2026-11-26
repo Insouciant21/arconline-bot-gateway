@@ -51,6 +51,14 @@ export function openDatabase(dbPath: string): DatabaseSync {
     );
 
     CREATE INDEX IF NOT EXISTS webhook_events_time_idx ON webhook_events(received_at);
+
+    CREATE TABLE IF NOT EXISTS admin_sessions (
+      token_hash TEXT PRIMARY KEY,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS admin_sessions_expires_idx ON admin_sessions(expires_at);
   `);
   return db;
 }

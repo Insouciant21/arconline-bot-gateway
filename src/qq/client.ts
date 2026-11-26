@@ -2,6 +2,7 @@ import type { BotRecord } from "../db/repositories.js";
 import type { QqTokenManager } from "./token.js";
 
 const QQ_API_BASE = "https://api.bot.qq.com";
+const QQ_REQUEST_TIMEOUT_MS = 30_000;
 
 export interface UploadC2CFileOptions {
   fileType: 1;
@@ -65,6 +66,7 @@ export class QqApiClient {
         "content-type": "application/json; charset=utf-8",
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(QQ_REQUEST_TIMEOUT_MS),
     });
 
     if (response.status === 401 && retryAuth) {

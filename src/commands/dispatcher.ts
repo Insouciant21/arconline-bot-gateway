@@ -194,6 +194,7 @@ export class CommandDispatcher {
   ): Promise<{ note?: string; failedReason?: string }> {
     const startedAt = Date.now();
     let notified = false;
+    let consecutivePollErrors = 0;
 
     try {
       const started = await this.deps.bridge.triggerSync(instance);
@@ -213,7 +214,13 @@ export class CommandDispatcher {
           };
         }
         await this.sleep(this.deps.config.syncPollIntervalMs);
-        job = await this.deps.bridge.getJob(instance, started.jobId);
+        try {
+          job = await this.deps.bridge.getJob(instance, started.jobId);
+          consecutivePollErrors = 0;
+        } catch (pollError) {
+          consecutivePollErrors++;
+          if (consecutivePollErrors >= 3) throw pollError;
+        }
       }
 
       if (job.status === "failed") {

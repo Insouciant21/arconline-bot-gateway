@@ -264,4 +264,22 @@ export class GatewayRepository {
     ).run(botId, eventId, now);
     return Number(result.changes) > 0;
   }
+
+  createAdminSession(tokenHash: string, expiresAt: number, now = Date.now()): void {
+    this.db.prepare("DELETE FROM admin_sessions WHERE expires_at <= ?").run(now);
+    this.db.prepare(
+      "INSERT INTO admin_sessions(token_hash, created_at, expires_at) VALUES(?, ?, ?)",
+    ).run(tokenHash, now, expiresAt);
+  }
+
+  hasValidAdminSession(tokenHash: string, now = Date.now()): boolean {
+    const row = this.db.prepare(
+      "SELECT 1 AS ok FROM admin_sessions WHERE token_hash = ? AND expires_at > ?",
+    ).get(tokenHash, now) as { ok?: number } | undefined;
+    return row?.ok === 1;
+  }
+
+  deleteAdminSession(tokenHash: string): void {
+    this.db.prepare("DELETE FROM admin_sessions WHERE token_hash = ?").run(tokenHash);
+  }
 }

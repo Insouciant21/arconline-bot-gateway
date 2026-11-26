@@ -1,5 +1,6 @@
 const QQ_TOKEN_URL = "https://bots.qq.com/app/getAppAccessToken";
 const REFRESH_BUFFER_MS = 60_000;
+const TOKEN_TIMEOUT_MS = 15_000;
 
 interface CachedToken {
   accessToken: string;
@@ -37,6 +38,7 @@ export class QqTokenManager {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ appId, clientSecret }),
+      signal: AbortSignal.timeout(TOKEN_TIMEOUT_MS),
     });
     if (!response.ok) {
       throw new Error(`QQ getAppAccessToken failed with HTTP ${response.status}`);

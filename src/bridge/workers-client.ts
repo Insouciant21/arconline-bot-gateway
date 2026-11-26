@@ -56,6 +56,9 @@ export class WorkersBridgeError extends Error {
   }
 }
 
+const JSON_TIMEOUT_MS = 20_000;
+const MEDIA_TIMEOUT_MS = 30_000;
+
 export class WorkersBridgeClient {
   constructor(private readonly fetchImpl: typeof fetch = fetch) {}
 
@@ -99,6 +102,7 @@ export class WorkersBridgeClient {
       headers: {
         authorization: `Bearer ${instance.bridgeSecret}`,
       },
+      signal: AbortSignal.timeout(MEDIA_TIMEOUT_MS),
     });
     if (!response.ok) {
       throw new WorkersBridgeError(`拉取媒体失败（HTTP ${response.status}）`, response.status);
@@ -117,6 +121,7 @@ export class WorkersBridgeClient {
         ...(init.body ? { "content-type": "application/json" } : {}),
         ...init.headers,
       },
+      signal: init.signal ?? AbortSignal.timeout(JSON_TIMEOUT_MS),
     });
     const text = await response.text();
     let payload: (T & { error?: string; code?: string }) | undefined;

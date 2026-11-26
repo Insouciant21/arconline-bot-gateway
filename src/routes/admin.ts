@@ -1,5 +1,6 @@
-import { createHmac } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
+import { isIP } from "node:net";
 import { dirname, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
@@ -13,6 +14,7 @@ const SESSION_COOKIE = "gw_admin_session";
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const LOGIN_WINDOW_MS = 5 * 60 * 1000;
 const LOGIN_MAX_FAILURES = 10;
+const MAX_TRACKED_LOGIN_IPS = 1000;
 
 const ADMIN_CSP = [
   "default-src 'self'",
@@ -43,6 +45,10 @@ export interface AdminRoutesDeps {
   adminSecret: string;
   publicBaseUrl: string | null;
   bridge: WorkersBridgeClient;
+}
+
+function sha256Hex(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
 function resolveAdminUiDir(): string | null {
@@ -77,22 +83,6 @@ function parseCookie(header: string | undefined, name: string): string | null {
   return null;
 }
 
-function signSessionToken(secret: string, expiresAt: number): string {
-  const payload = String(expiresAt);
-  const sig = createHmac("sha256", secret).update(`admin-session:${payload}`, "utf8").digest("base64url");
-  return `${payload}.${sig}`;
-}
-
-function verifySessionToken(secret: string, token: string | null, now = Date.now()): boolean {
-  if (!token) return false;
-  const [payload, sig] = token.split(".");
-  if (!payload || !sig || !/^\d+$/.test(payload)) return false;
-  const expiresAt = Number(payload);
-  if (!Number.isFinite(expiresAt) || expiresAt <= now) return false;
-  const expectedSig = createHmac("sha256", secret).update(`admin-session:${payload}`, "utf8").digest("base64url");
-  return constantTimeEqual(sig, expectedSig);
-}
-
 function isHttpsRequest(req: Request, publicBaseUrl: string | null): boolean {
   if (publicBaseUrl?.startsWith("https://")) return true;
   if (req.headers.get("x-forwarded-proto") === "https") return true;
@@ -104,15 +94,65 @@ function buildSessionCookie(value: string, maxAgeSec: number, secure: boolean): 
 }
 
 function hasValidOrigin(req: Request, publicBaseUrl: string | null): boolean {
+  const fetchSite = req.headers.get("sec-fetch-site");
+  if (fetchSite && fetchSite !== "same-origin" && fetchSite !== "none") {
+    return false;
+  }
   const origin = req.headers.get("origin");
   if (!origin) return true;
   const requestOrigin = new URL(req.url).origin;
   return origin === requestOrigin || (publicBaseUrl !== null && origin === new URL(publicBaseUrl).origin);
 }
 
+/**
+ * Resolve trusted client IP from proxy headers without trusting spoofed leading XFF entries.
+ */
+function resolveClientIp(req: Request): string {
+  const realIp = req.headers.get("x-real-ip")?.trim();
+  if (realIp) return realIp;
+  const forwarded = req.headers.get("x-forwarded-for");
+  if (forwarded) {
+    const parts = forwarded.split(",").map((item) => item.trim()).filter(Boolean);
+    if (parts.length > 0) return parts[parts.length - 1];
+  }
+  return "unknown";
+}
+
+/**
+ * Validate Workers instance baseUrl to prevent SSRF to localhost, private IPs, or Docker internal hosts.
+ */
+export function isAllowedInstanceUrl(rawUrl: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:") return false;
+  if (url.username || url.password) return false;
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (!host || !host.includes(".")) return false;
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) {
+    return false;
+  }
+  if (isIP(host) !== 0) return false;
+  return true;
+}
+
 export function createAdminRoutes(deps: AdminRoutesDeps) {
   const router = new Hono();
   const loginFailures = new Map<string, { count: number; resetAt: number }>();
+
+  function pruneLoginFailures(now: number) {
+    for (const [key, entry] of loginFailures) {
+      if (entry.resetAt <= now) loginFailures.delete(key);
+    }
+    while (loginFailures.size >= MAX_TRACKED_LOGIN_IPS) {
+      const oldest = loginFailures.keys().next().value;
+      if (!oldest) break;
+      loginFailures.delete(oldest);
+    }
+  }
 
   const serveIndex = () => {
     const uiDir = resolveAdminUiDir();
@@ -170,7 +210,7 @@ export function createAdminRoutes(deps: AdminRoutesDeps) {
     if (!hasValidOrigin(c.req.raw, deps.publicBaseUrl)) {
       return c.json({ error: "Invalid origin" }, 403);
     }
-    const clientIp = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
+    const clientIp = resolveClientIp(c.req.raw);
     const now = Date.now();
     const record = loginFailures.get(clientIp);
     if (record && record.resetAt > now && record.count >= LOGIN_MAX_FAILURES) {
@@ -182,19 +222,24 @@ export function createAdminRoutes(deps: AdminRoutesDeps) {
     const supplied = typeof body.secret === "string" ? body.secret.trim() : "";
 
     if (!supplied || !constantTimeEqual(supplied, deps.adminSecret)) {
+      pruneLoginFailures(now);
       const nextCount = record && record.resetAt > now ? record.count + 1 : 1;
-      loginFailures.set(clientIp, { count: nextCount, resetAt: record && record.resetAt > now ? record.resetAt : now + LOGIN_WINDOW_MS });
+      loginFailures.set(clientIp, {
+        count: nextCount,
+        resetAt: record && record.resetAt > now ? record.resetAt : now + LOGIN_WINDOW_MS,
+      });
       return c.json({ error: "ADMIN_SECRET 无效" }, 401);
     }
 
     loginFailures.delete(clientIp);
-    const token = signSessionToken(deps.adminSecret, now + SESSION_TTL_MS);
+    const rawToken = randomBytes(32).toString("hex");
+    deps.repo.createAdminSession(sha256Hex(rawToken), now + SESSION_TTL_MS, now);
     const secure = isHttpsRequest(c.req.raw, deps.publicBaseUrl);
     return Response.json(
       { ok: true },
       {
         headers: {
-          "set-cookie": buildSessionCookie(token, SESSION_TTL_MS / 1000, secure),
+          "set-cookie": buildSessionCookie(rawToken, SESSION_TTL_MS / 1000, secure),
           "cache-control": "no-store",
         },
       },
@@ -202,6 +247,13 @@ export function createAdminRoutes(deps: AdminRoutesDeps) {
   });
 
   router.post("/admin/logout", (c) => {
+    if (!hasValidOrigin(c.req.raw, deps.publicBaseUrl)) {
+      return c.json({ error: "Invalid origin" }, 403);
+    }
+    const cookieToken = parseCookie(c.req.header("cookie"), SESSION_COOKIE);
+    if (cookieToken && /^[a-f0-9]{64}$/.test(cookieToken)) {
+      deps.repo.deleteAdminSession(sha256Hex(cookieToken));
+    }
     const secure = isHttpsRequest(c.req.raw, deps.publicBaseUrl);
     return Response.json(
       { ok: true },
@@ -223,7 +275,11 @@ export function createAdminRoutes(deps: AdminRoutesDeps) {
 
     if (!bearerOk) {
       const cookieToken = parseCookie(c.req.header("cookie"), SESSION_COOKIE);
-      const cookieOk = verifySessionToken(deps.adminSecret, cookieToken);
+      const cookieOk = Boolean(
+        cookieToken &&
+        /^[a-f0-9]{64}$/.test(cookieToken) &&
+        deps.repo.hasValidAdminSession(sha256Hex(cookieToken)),
+      );
       if (!cookieOk) {
         return c.json({ error: "Unauthorized" }, 401);
       }
@@ -290,8 +346,8 @@ export function createAdminRoutes(deps: AdminRoutesDeps) {
     const baseUrl = typeof body.baseUrl === "string" ? body.baseUrl.trim().replace(/\/+$/, "") : "";
     const bridgeSecret = typeof body.bridgeSecret === "string" ? body.bridgeSecret.trim() : "";
     const imageMode = typeof body.imageMode === "string" ? body.imageMode : "official";
-    if (!/^https?:\/\//.test(baseUrl) || !bridgeSecret || !VALID_MODES.has(imageMode as ImageMode)) {
-      return c.json({ error: "Invalid instance payload" }, 400);
+    if (!isAllowedInstanceUrl(baseUrl) || !bridgeSecret || !VALID_MODES.has(imageMode as ImageMode)) {
+      return c.json({ error: "Invalid instance payload (requires public https:// baseUrl)" }, 400);
     }
 
     let id = "";
@@ -349,8 +405,15 @@ export function createAdminRoutes(deps: AdminRoutesDeps) {
     if (body.imageMode !== undefined && (typeof body.imageMode !== "string" || !VALID_MODES.has(body.imageMode as ImageMode))) {
       return c.json({ error: "Invalid imageMode" }, 400);
     }
+    let nextBaseUrl: string | undefined;
+    if (body.baseUrl !== undefined) {
+      if (typeof body.baseUrl !== "string" || !isAllowedInstanceUrl(body.baseUrl.trim())) {
+        return c.json({ error: "Invalid baseUrl (requires public https:// URL)" }, 400);
+      }
+      nextBaseUrl = body.baseUrl.trim().replace(/\/+$/, "");
+    }
     const updated = deps.repo.updateInstance(c.req.param("id"), {
-      ...(typeof body.baseUrl === "string" && /^https?:\/\//.test(body.baseUrl.trim()) ? { baseUrl: body.baseUrl.trim() } : {}),
+      ...(nextBaseUrl ? { baseUrl: nextBaseUrl } : {}),
       ...(typeof body.bridgeSecret === "string" && body.bridgeSecret.trim() ? { bridgeSecret: body.bridgeSecret.trim() } : {}),
       ...(typeof body.imageMode === "string" ? { imageMode: body.imageMode as ImageMode } : {}),
       ...(body.label !== undefined ? { label: typeof body.label === "string" ? body.label.trim() || null : null } : {}),

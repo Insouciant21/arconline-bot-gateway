@@ -4,10 +4,15 @@ import type { GatewayRepository } from "../db/repositories.js";
 import type { QqC2CMessageData, QqWebhookPayload } from "../qq/types.js";
 import type { CommandDispatcher } from "../commands/dispatcher.js";
 
+const MAX_WEBHOOK_SKEW_SECONDS = 5 * 60;
+const VALID_PLAIN_TOKEN = /^[A-Za-z0-9_-]{1,128}$/;
+const VALID_UNIX_TS = /^\d{1,20}$/;
+
 export interface WebhookRouterDeps {
   repo: GatewayRepository;
   dispatcher: CommandDispatcher;
   scheduleBackground?: (task: Promise<void>) => void;
+  nowSeconds?: () => number;
 }
 
 export function createWebhookRoutes(deps: WebhookRouterDeps) {
@@ -17,6 +22,7 @@ export function createWebhookRoutes(deps: WebhookRouterDeps) {
       void task.catch((err) => console.error("[gateway] background command failed:", err));
     });
   });
+  const nowSeconds = deps.nowSeconds ?? (() => Math.floor(Date.now() / 1000));
 
   router.post("/qq/webhook/:botId", async (c) => {
     const botId = c.req.param("botId");
@@ -43,7 +49,13 @@ export function createWebhookRoutes(deps: WebhookRouterDeps) {
     if (payload.op === 13) {
       const plainToken = payload.d?.plain_token;
       const eventTs = payload.d?.event_ts;
-      if (typeof plainToken !== "string" || typeof eventTs !== "string") {
+      // Strictly reject non-token characters so op=13 cannot act as a signing oracle for JSON payloads.
+      if (
+        typeof plainToken !== "string" ||
+        typeof eventTs !== "string" ||
+        !VALID_PLAIN_TOKEN.test(plainToken) ||
+        !VALID_UNIX_TS.test(eventTs)
+      ) {
         return c.json({ error: "Invalid validation payload" }, 400);
       }
       return c.json({
@@ -52,8 +64,14 @@ export function createWebhookRoutes(deps: WebhookRouterDeps) {
       });
     }
 
-    if (!signature || !verifyWebhookSignature(bot.clientSecret, timestamp, signature, rawBody)) {
-      return c.json({ error: "Missing or invalid signature" }, 401);
+    if (
+      !signature ||
+      !timestamp ||
+      !VALID_UNIX_TS.test(timestamp) ||
+      Math.abs(nowSeconds() - Number(timestamp)) > MAX_WEBHOOK_SKEW_SECONDS ||
+      !verifyWebhookSignature(bot.clientSecret, timestamp, signature, rawBody)
+    ) {
+      return c.json({ error: "Missing, expired or invalid signature" }, 401);
     }
 
     if (payload.op === 0) {
