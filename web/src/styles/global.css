@@ -275,14 +275,9 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   font-size: 24px;
   line-height: 1.1;
 }
-.kpi-card small {
-  display: block;
-  margin-top: 6px;
-  color: var(--muted);
-  font-size: 11px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.kpi-card strong.kpi-status {
+  font-size: 16px;
+  margin-top: 12px;
 }
 
 .section-card {
@@ -295,10 +290,10 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .section-card-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 20px 22px 16px;
+  padding: 18px 22px 16px;
   border-bottom: 1px solid var(--line);
   background: linear-gradient(180deg, #fbfbfc, #f6f6f8);
 }
@@ -586,7 +581,10 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 }
 
 @media (max-width: 600px) {
-  .kpi-grid { grid-template-columns: 1fr; }
+  .kpi-grid { gap: 10px; }
+  .kpi-card { padding: 12px 14px; }
+  .kpi-card strong { font-size: 20px; }
+  .kpi-card strong.kpi-status { font-size: 13px; margin-top: 10px; }
   .brand-wordmark { font-size: 19px; }
   .brand-lockup { gap: 8px; }
   .auth-panel { padding: 24px 18px 20px; }

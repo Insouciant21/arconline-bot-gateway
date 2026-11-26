@@ -391,8 +391,6 @@ export function AdminApp() {
   }
 
   const webhookBase = (session.publicBaseUrl || (typeof window !== "undefined" ? window.location.origin : "")).replace(/\/+$/, "");
-  const activeBots = bots.filter((b) => b.enabled).length;
-  const activeInstances = instances.filter((i) => i.enabled).length;
 
   return (
     <main className="app-shell">
@@ -421,22 +419,18 @@ export function AdminApp() {
           <div className="kpi-card accent">
             <span><Bot size={12} /> QQ BOTS</span>
             <strong>{bots.length}</strong>
-            <small>{activeBots} 个启用中</small>
           </div>
           <div className="kpi-card">
             <span><Server size={12} /> WORKERS INSTANCES</span>
             <strong>{instances.length}</strong>
-            <small>{activeInstances} 个启用中（按 User Code 索引）</small>
           </div>
           <div className="kpi-card accent">
             <span><Link2 size={12} /> USER BINDINGS</span>
             <strong>{bindings.length}</strong>
-            <small>C2C 单聊路由映射</small>
           </div>
           <div className="kpi-card">
             <span><Activity size={12} /> WEBHOOK ORIGIN</span>
-            <strong style={{ fontSize: "15px", marginTop: "11px" }}>{session.publicBaseUrl ? "HTTPS READY" : "FALLBACK"}</strong>
-            <small title={webhookBase}>{webhookBase}</small>
+            <strong className="kpi-status">{session.publicBaseUrl ? "HTTPS READY" : "FALLBACK"}</strong>
           </div>
         </section>
 
@@ -445,7 +439,6 @@ export function AdminApp() {
             <div>
               <p className="section-kicker">01 / QQ OPEN PLATFORM</p>
               <h2>QQ Bot 接入管理</h2>
-              <p>先在此登记 Bot，再复制生成的 Webhook 回调 URL 与公网 IP 填入 QQ 开放平台保存校验。</p>
             </div>
             <Button type="button" onClick={openNewBotModal}>
               <Plus size={15} />
@@ -545,7 +538,6 @@ export function AdminApp() {
             <div>
               <p className="section-kicker">02 / ARCAEA WORKERS</p>
               <h2>Workers 实例管理</h2>
-              <p>只需填写面板地址与 BOT_BRIDGE_SECRET，网关会自动读取对应账号的 Arcaea User Code 作为实例标识。</p>
             </div>
             <Button type="button" onClick={openNewInstanceModal}>
               <Plus size={15} />
@@ -658,7 +650,6 @@ export function AdminApp() {
             <div>
               <p className="section-kicker">03 / ROUTE MAPPINGS</p>
               <h2>QQ 用户绑定关系</h2>
-              <p>用户在 QQ 私聊发送 /bind &lt;UserCode&gt;:&lt;绑定码&gt; 后自动写入此表。</p>
             </div>
           </div>
           <div className="section-card-body">
