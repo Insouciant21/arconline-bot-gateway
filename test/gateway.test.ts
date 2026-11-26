@@ -181,8 +181,11 @@ describe("gateway multi-bot & multi-instance routing", () => {
 
       if (url.hostname === "bob.workers.dev") {
         expect(req.headers.get("authorization")).toBe("Bearer bob-secret");
+        if (url.pathname === "/api/bot/profile") {
+          return Response.json({ userCode: "987654321", name: "Bob", rating: 11.8 });
+        }
         if (url.pathname === "/api/bot/bind/verify") {
-          return Response.json({ verified: true, user: { name: "Bob", userCode: "222", rating: 11.8 } });
+          return Response.json({ verified: true, user: { name: "Bob", userCode: "987654321", rating: 11.8 } });
         }
       }
 
@@ -255,14 +258,14 @@ describe("gateway multi-bot & multi-instance routing", () => {
     const addInstA = await app.request("/admin/instances", {
       method: "POST",
       headers: { authorization: "Bearer admin-secret-xyz", "content-type": "application/json" },
-      body: JSON.stringify({ id: "alice", baseUrl: "https://alice.workers.dev", bridgeSecret: "alice-secret" }),
+      body: JSON.stringify({ baseUrl: "https://alice.workers.dev", bridgeSecret: "alice-secret" }),
     });
     expect(addInstA.status).toBe(201);
 
     const addInstB = await app.request("/admin/instances", {
       method: "POST",
       headers: { authorization: "Bearer admin-secret-xyz", "content-type": "application/json" },
-      body: JSON.stringify({ id: "bob", baseUrl: "https://bob.workers.dev", bridgeSecret: "bob-secret" }),
+      body: JSON.stringify({ baseUrl: "https://bob.workers.dev", bridgeSecret: "bob-secret" }),
     });
     expect(addInstB.status).toBe(201);
 

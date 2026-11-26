@@ -204,10 +204,9 @@ export function renderAdminHtml(): string {
 
       <section class="card">
         <h2>2. Workers 实例配置（arconline-ext）</h2>
-        <p class="muted">填写面板地址与 <code>BOT_BRIDGE_SECRET</code>，默认自动读取实例的 Arcaea <code>userCode</code> 作为 ID，绑定时使用 <code>/bind &lt;UserCode&gt;:&lt;绑定码&gt;</code>。</p>
+        <p class="muted">填写面板地址与 <code>BOT_BRIDGE_SECRET</code>，保存时自动读取实例的 Arcaea <code>userCode</code>，绑定指令为 <code>/bind &lt;UserCode&gt;:&lt;绑定码&gt;</code>。</p>
         <form id="instanceForm">
           <div class="form-grid">
-            <label>User Code（留空自动读取）<input id="instId" pattern="[A-Za-z0-9_-]{1,64}" placeholder="留空自动读取好友码" /></label>
             <label>Base URL<input id="instUrl" type="url" required placeholder="https://arc.moeblue.top" /></label>
             <label>BOT_BRIDGE_SECRET<input id="instSecret" type="password" required placeholder="对应 Worker Secret" /></label>
             <label>出图模式
@@ -502,7 +501,6 @@ export function renderAdminHtml(): string {
         await api("/admin/instances", {
           method: "POST",
           body: JSON.stringify({
-            id: $("instId").value.trim(),
             baseUrl: $("instUrl").value.trim(),
             bridgeSecret: $("instSecret").value.trim(),
             imageMode: $("instMode").value,
