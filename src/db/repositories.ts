@@ -82,6 +82,17 @@ export class GatewayRepository {
     return Number(result.changes) > 0;
   }
 
+  updateBot(id: string, patch: { appId?: string; clientSecret?: string; enabled?: boolean }): BotRecord | null {
+    const existing = this.getBot(id);
+    if (!existing) return null;
+    return this.upsertBot({
+      id,
+      appId: patch.appId ?? existing.appId,
+      clientSecret: patch.clientSecret ?? existing.clientSecret,
+      enabled: patch.enabled ?? existing.enabled,
+    });
+  }
+
   upsertInstance(input: {
     id: string;
     baseUrl: string;
@@ -162,6 +173,22 @@ export class GatewayRepository {
   deleteInstance(id: string): boolean {
     const result = this.db.prepare("DELETE FROM instances WHERE id = ?").run(id);
     return Number(result.changes) > 0;
+  }
+
+  updateInstance(
+    id: string,
+    patch: { baseUrl?: string; bridgeSecret?: string; imageMode?: ImageMode; label?: string | null; enabled?: boolean },
+  ): InstanceRecord | null {
+    const existing = this.getInstance(id);
+    if (!existing) return null;
+    return this.upsertInstance({
+      id,
+      baseUrl: patch.baseUrl ?? existing.baseUrl,
+      bridgeSecret: patch.bridgeSecret ?? existing.bridgeSecret,
+      imageMode: patch.imageMode ?? existing.imageMode,
+      label: patch.label !== undefined ? patch.label : existing.label,
+      enabled: patch.enabled ?? existing.enabled,
+    });
   }
 
   setBinding(botId: string, scene: "c2c" | "group", openid: string, instanceId: string): BindingRecord {

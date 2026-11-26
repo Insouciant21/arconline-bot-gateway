@@ -40,10 +40,16 @@ export function createGatewayApp(options: GatewayAppOptions) {
   });
 
   const app = new Hono();
+  app.get("/", (c) => c.redirect("/admin"));
   app.get("/health", (c) => c.json({ ok: true, timestamp: new Date().toISOString() }));
   app.route("/", createWebhookRoutes({ repo, dispatcher, scheduleBackground: options.scheduleBackground }));
   app.route("/", createMediaRoutes({ repo, bridge, mediaSigner }));
-  app.route("/", createAdminRoutes({ repo, adminSecret: options.config.adminSecret }));
+  app.route("/", createAdminRoutes({
+    repo,
+    adminSecret: options.config.adminSecret,
+    publicBaseUrl: options.config.publicBaseUrl,
+    bridge,
+  }));
 
   return { app, db, repo };
 }

@@ -365,4 +365,75 @@ describe("gateway multi-bot & multi-instance routing", () => {
     expect(sentQqCalls[1].body.content).toContain("Lowiro 维护中");
     expect(sentQqCalls[1].body.content).toContain("已回退发送最近一次缓存 B50");
   });
+
+  it("serves /admin UI, supports cookie login/logout, patch, and instance connectivity check", async () => {
+    const { app } = setupGateway();
+
+    const uiRes = await app.request("/admin");
+    expect(uiRes.status).toBe(200);
+    expect(uiRes.headers.get("content-type")).toContain("text/html");
+    expect(uiRes.headers.get("x-frame-options")).toBe("DENY");
+    expect(await uiRes.text()).toContain("ArcOnline QQ Bot Gateway");
+
+    const badLogin = await app.request("/admin/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secret: "wrong-secret" }),
+    });
+    expect(badLogin.status).toBe(401);
+
+    const okLogin = await app.request("/admin/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secret: "admin-secret-xyz" }),
+    });
+    expect(okLogin.status).toBe(200);
+    const cookie = okLogin.headers.get("set-cookie")!.split(";")[0];
+
+    const sessionRes = await app.request("/admin/session", { headers: { cookie } });
+    expect(sessionRes.status).toBe(200);
+    expect(await sessionRes.json()).toEqual({ authenticated: true, publicBaseUrl: "https://bot-gw.example" });
+
+    const createBot = await app.request("/admin/bots", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ id: "main", appId: "3003", clientSecret: "sec-3" }),
+    });
+    expect(createBot.status).toBe(201);
+
+    const toggleBot = await app.request("/admin/bots/main", {
+      method: "PATCH",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ enabled: false }),
+    });
+    expect(toggleBot.status).toBe(200);
+    expect((await toggleBot.json() as { bot: { enabled: boolean } }).bot.enabled).toBe(false);
+
+    const createInst = await app.request("/admin/instances", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ id: "alice", baseUrl: "https://alice.workers.dev", bridgeSecret: "alice-secret" }),
+    });
+    expect(createInst.status).toBe(201);
+
+    const testConn = await app.request("/admin/instances/alice/test", {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(testConn.status).toBe(200);
+    const connBody = await testConn.json() as { ok: boolean; message: string };
+    expect(connBody.ok).toBe(true);
+    expect(connBody.message).toContain("Hikari");
+
+    const badOriginPatch = await app.request("/admin/bots/main", {
+      method: "PATCH",
+      headers: { cookie, origin: "https://evil.example", "content-type": "application/json" },
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(badOriginPatch.status).toBe(403);
+
+    const logoutRes = await app.request("/admin/logout", { method: "POST", headers: { cookie } });
+    expect(logoutRes.status).toBe(200);
+    expect(logoutRes.headers.get("set-cookie")).toContain("Max-Age=0");
+  });
 });
