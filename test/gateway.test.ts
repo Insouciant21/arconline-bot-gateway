@@ -379,7 +379,14 @@ describe("gateway multi-bot & multi-instance routing", () => {
     expect(uiRes.status).toBe(200);
     expect(uiRes.headers.get("content-type")).toContain("text/html");
     expect(uiRes.headers.get("x-frame-options")).toBe("DENY");
-    expect(await uiRes.text()).toContain("ArcOnline QQ Bot Gateway");
+    expect(await uiRes.text()).toContain("ArcOnline QQ Gateway");
+
+    const faviconRes = await app.request("/admin/favicon.svg");
+    expect(faviconRes.status).toBe(200);
+    expect(faviconRes.headers.get("content-type")).toContain("image/svg+xml");
+
+    const traversalRes = await app.request("/admin/_astro/..%2F..%2Fpackage.json");
+    expect(traversalRes.status).toBe(404);
 
     const badLogin = await app.request("/admin/login", {
       method: "POST",

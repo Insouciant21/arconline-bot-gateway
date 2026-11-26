@@ -1,9 +1,11 @@
 import { createHmac } from "node:crypto";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { dirname, extname, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
 import { WorkersBridgeClient, WorkersBridgeError } from "../bridge/workers-client.js";
 import { constantTimeEqual } from "../crypto/aes.js";
 import type { GatewayRepository, ImageMode } from "../db/repositories.js";
-import { renderAdminHtml } from "../ui/admin-page.js";
 
 const VALID_ID = /^[a-zA-Z0-9_-]{1,64}$/;
 const VALID_MODES = new Set<ImageMode>(["official", "custom", "text"]);
@@ -12,11 +14,56 @@ const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const LOGIN_WINDOW_MS = 5 * 60 * 1000;
 const LOGIN_MAX_FAILURES = 10;
 
+const ADMIN_CSP = [
+  "default-src 'self'",
+  "base-uri 'none'",
+  "connect-src 'self'",
+  "font-src 'self' https://fonts.gstatic.com",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+  "img-src 'self' data:",
+  "object-src 'none'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+].join("; ");
+
+const MIME_TYPES: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".mjs": "application/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".woff2": "font/woff2",
+  ".json": "application/json; charset=utf-8",
+};
+
 export interface AdminRoutesDeps {
   repo: GatewayRepository;
   adminSecret: string;
   publicBaseUrl: string | null;
   bridge: WorkersBridgeClient;
+}
+
+function resolveAdminUiDir(): string | null {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    resolve(here, "../admin-ui"),
+    resolve(here, "../../dist/admin-ui"),
+    resolve(process.cwd(), "dist/admin-ui"),
+  ];
+  for (const dir of candidates) {
+    if (existsSync(resolve(dir, "index.html"))) return dir;
+  }
+  return null;
+}
+
+function readStaticAsset(baseDir: string, relativePath: string): { body: Buffer; contentType: string } | null {
+  const target = resolve(baseDir, relativePath);
+  if (target !== baseDir && !target.startsWith(`${baseDir}${sep}`)) return null;
+  if (!existsSync(target) || !statSync(target).isFile()) return null;
+  const contentType = MIME_TYPES[extname(target).toLowerCase()] || "application/octet-stream";
+  return { body: readFileSync(target), contentType };
 }
 
 function parseCookie(header: string | undefined, name: string): string | null {
@@ -67,15 +114,54 @@ export function createAdminRoutes(deps: AdminRoutesDeps) {
   const router = new Hono();
   const loginFailures = new Map<string, { count: number; resetAt: number }>();
 
-  router.get("/admin", () => {
-    return new Response(renderAdminHtml(), {
+  const serveIndex = () => {
+    const uiDir = resolveAdminUiDir();
+    const asset = uiDir ? readStaticAsset(uiDir, "index.html") : null;
+    if (!asset) {
+      return new Response("Admin UI not built. Run `pnpm build` first.", { status: 503 });
+    }
+    return new Response(new Uint8Array(asset.body), {
       status: 200,
       headers: {
-        "content-type": "text/html; charset=utf-8",
+        "content-type": asset.contentType,
         "cache-control": "no-store",
         "x-content-type-options": "nosniff",
         "x-frame-options": "DENY",
-        "content-security-policy": "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'",
+        "content-security-policy": ADMIN_CSP,
+      },
+    });
+  };
+
+  router.get("/admin", serveIndex);
+  router.get("/admin/", serveIndex);
+  router.get("/admin/favicon.svg", () => {
+    const uiDir = resolveAdminUiDir();
+    const asset = uiDir ? readStaticAsset(uiDir, "favicon.svg") : null;
+    if (!asset) return new Response("Not Found", { status: 404 });
+    return new Response(new Uint8Array(asset.body), {
+      status: 200,
+      headers: {
+        "content-type": asset.contentType,
+        "cache-control": "public, max-age=86400",
+        "x-content-type-options": "nosniff",
+      },
+    });
+  });
+
+  router.get("/admin/_astro/*", (c) => {
+    const uiDir = resolveAdminUiDir();
+    if (!uiDir) return new Response("Not Found", { status: 404 });
+    const rawPath = new URL(c.req.url).pathname.slice("/admin/".length);
+    let relPath: string;
+    try { relPath = decodeURIComponent(rawPath); } catch { return new Response("Bad Request", { status: 400 }); }
+    const asset = readStaticAsset(uiDir, relPath);
+    if (!asset) return new Response("Not Found", { status: 404 });
+    return new Response(new Uint8Array(asset.body), {
+      status: 200,
+      headers: {
+        "content-type": asset.contentType,
+        "cache-control": "public, max-age=31536000, immutable",
+        "x-content-type-options": "nosniff",
       },
     });
   });
@@ -128,7 +214,8 @@ export function createAdminRoutes(deps: AdminRoutesDeps) {
     );
   });
 
-  router.use("/admin/*", async (c, next) => {
+  const api = new Hono();
+  api.use("*", async (c, next) => {
     const header = c.req.header("authorization") ?? "";
     const match = header.match(/^Bearer\s+(.+)$/i);
     const supplied = match?.[1]?.trim() ?? "";
@@ -147,14 +234,14 @@ export function createAdminRoutes(deps: AdminRoutesDeps) {
     await next();
   });
 
-  router.get("/admin/session", (c) => c.json({
+  api.get("/session", (c) => c.json({
     authenticated: true,
     publicBaseUrl: deps.publicBaseUrl,
   }));
 
-  router.get("/admin/bots", (c) => c.json({ bots: deps.repo.listBots() }));
+  api.get("/bots", (c) => c.json({ bots: deps.repo.listBots() }));
 
-  router.post("/admin/bots", async (c) => {
+  api.post("/bots", async (c) => {
     let body: { id?: unknown; appId?: unknown; clientSecret?: unknown; enabled?: unknown };
     try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON" }, 400); }
     const id = typeof body.id === "string" ? body.id.trim() : "";
@@ -172,7 +259,7 @@ export function createAdminRoutes(deps: AdminRoutesDeps) {
     return c.json({ bot: { id: saved.id, appId: saved.appId, enabled: saved.enabled, createdAt: saved.createdAt } }, 201);
   });
 
-  router.patch("/admin/bots/:id", async (c) => {
+  api.patch("/bots/:id", async (c) => {
     let body: { appId?: unknown; clientSecret?: unknown; enabled?: unknown };
     try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON" }, 400); }
     const updated = deps.repo.updateBot(c.req.param("id"), {
@@ -184,14 +271,14 @@ export function createAdminRoutes(deps: AdminRoutesDeps) {
     return c.json({ bot: { id: updated.id, appId: updated.appId, enabled: updated.enabled, createdAt: updated.createdAt } });
   });
 
-  router.delete("/admin/bots/:id", (c) => {
+  api.delete("/bots/:id", (c) => {
     const removed = deps.repo.deleteBot(c.req.param("id"));
     return removed ? c.json({ ok: true }) : c.json({ error: "Bot not found" }, 404);
   });
 
-  router.get("/admin/instances", (c) => c.json({ instances: deps.repo.listInstances() }));
+  api.get("/instances", (c) => c.json({ instances: deps.repo.listInstances() }));
 
-  router.post("/admin/instances", async (c) => {
+  api.post("/instances", async (c) => {
     let body: {
       baseUrl?: unknown;
       bridgeSecret?: unknown;
@@ -250,7 +337,7 @@ export function createAdminRoutes(deps: AdminRoutesDeps) {
     }, 201);
   });
 
-  router.patch("/admin/instances/:id", async (c) => {
+  api.patch("/instances/:id", async (c) => {
     let body: {
       baseUrl?: unknown;
       bridgeSecret?: unknown;
@@ -282,7 +369,7 @@ export function createAdminRoutes(deps: AdminRoutesDeps) {
     });
   });
 
-  router.post("/admin/instances/:id/test", async (c) => {
+  api.post("/instances/:id/test", async (c) => {
     const instance = deps.repo.getInstance(c.req.param("id"));
     if (!instance) return c.json({ error: "Instance not found" }, 404);
     try {
@@ -309,14 +396,14 @@ export function createAdminRoutes(deps: AdminRoutesDeps) {
     }
   });
 
-  router.delete("/admin/instances/:id", (c) => {
+  api.delete("/instances/:id", (c) => {
     const removed = deps.repo.deleteInstance(c.req.param("id"));
     return removed ? c.json({ ok: true }) : c.json({ error: "Instance not found" }, 404);
   });
 
-  router.get("/admin/bindings", (c) => c.json({ bindings: deps.repo.listBindings() }));
+  api.get("/bindings", (c) => c.json({ bindings: deps.repo.listBindings() }));
 
-  router.delete("/admin/bindings/:botId/:scene/:openid", (c) => {
+  api.delete("/bindings/:botId/:scene/:openid", (c) => {
     const scene = c.req.param("scene");
     if (scene !== "c2c" && scene !== "group") {
       return c.json({ error: "Invalid scene" }, 400);
@@ -324,6 +411,8 @@ export function createAdminRoutes(deps: AdminRoutesDeps) {
     const removed = deps.repo.deleteBinding(c.req.param("botId"), scene, c.req.param("openid"));
     return removed ? c.json({ ok: true }) : c.json({ error: "Binding not found" }, 404);
   });
+
+  router.route("/admin", api);
 
   return router;
 }

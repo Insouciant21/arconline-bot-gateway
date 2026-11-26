@@ -10,6 +10,7 @@ RUN pnpm install --frozen-lockfile
 FROM deps AS build
 COPY tsconfig.json ./
 COPY src ./src
+COPY web ./web
 RUN pnpm run build && pnpm prune --prod
 
 FROM node:24-slim AS runner

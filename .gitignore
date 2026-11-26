@@ -11,3 +11,6 @@ coverage/
 *.db
 *.db-wal
 *.db-shm
+web/.astro/
+web/node_modules/
+

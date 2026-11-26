@@ -1,0 +1,19 @@
+---
+import "../styles/global.css";
+const { title = "ArcOnline QQ Gateway" } = Astro.props;
+---
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content="ArcOnline QQ Bot Gateway 共享多对多管理控制台" />
+    <link rel="icon" href="/admin/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>
