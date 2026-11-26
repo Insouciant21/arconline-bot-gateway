@@ -430,7 +430,7 @@ export function AdminApp() {
           </div>
           <div className="kpi-card">
             <span><Activity size={12} /> WEBHOOK ORIGIN</span>
-            <strong className="kpi-status">{session.publicBaseUrl ? "HTTPS READY" : "FALLBACK"}</strong>
+            <strong className="kpi-status" title={webhookBase}>{webhookBase}</strong>
           </div>
         </section>
 

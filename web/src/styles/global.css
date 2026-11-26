@@ -276,8 +276,11 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   line-height: 1.1;
 }
 .kpi-card strong.kpi-status {
-  font-size: 16px;
-  margin-top: 12px;
+  font-size: 14px;
+  line-height: 1.35;
+  margin-top: 10px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .section-card {
@@ -584,7 +587,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   .kpi-grid { gap: 10px; }
   .kpi-card { padding: 12px 14px; }
   .kpi-card strong { font-size: 20px; }
-  .kpi-card strong.kpi-status { font-size: 13px; margin-top: 10px; }
+  .kpi-card strong.kpi-status { font-size: 12px; margin-top: 8px; }
   .brand-wordmark { font-size: 19px; }
   .brand-lockup { gap: 8px; }
   .auth-panel { padding: 24px 18px 20px; }
