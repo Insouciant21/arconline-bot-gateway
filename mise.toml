@@ -1,0 +1,28 @@
+min_version = "2026.10.22"
+
+[settings]
+idiomatic_version_file_enable_tools = ["node", "pnpm"]
+
+[tasks.install]
+description = "Install gateway dependencies"
+run = "pnpm install"
+
+[tasks.dev]
+description = "Run gateway in watch mode"
+run = "pnpm run dev"
+
+[tasks.typecheck]
+description = "Run TypeScript typecheck"
+run = "pnpm run typecheck"
+
+[tasks.test]
+description = "Run gateway tests"
+run = "pnpm run test"
+
+[tasks.build]
+description = "Compile gateway TypeScript to dist/"
+run = "pnpm run build"
+
+[tasks.start]
+description = "Run built gateway"
+run = "pnpm run start"
