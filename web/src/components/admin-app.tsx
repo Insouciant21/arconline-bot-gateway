@@ -482,11 +482,11 @@ export function AdminApp() {
                       const webhookUrl = `${webhookBase}/qq/webhook/${encodeURIComponent(bot.id)}`;
                       return (
                         <tr key={bot.id}>
-                          <td><span className="mono-chip">{bot.id}</span></td>
-                          <td>{bot.appId}</td>
-                          <td><span className={`status-pill ${bot.enabled ? "on" : "off"}`}>{bot.enabled ? "启用" : "禁用"}</span></td>
-                          <td><span className="mono-chip">{webhookUrl}</span></td>
-                          <td>
+                          <td data-label="BOT ID"><span className="mono-chip">{bot.id}</span></td>
+                          <td data-label="APP ID"><span className="cell-text">{bot.appId}</span></td>
+                          <td data-label="状态"><span className={`status-pill ${bot.enabled ? "on" : "off"}`}>{bot.enabled ? "启用" : "禁用"}</span></td>
+                          <td data-label="WEBHOOK 回调地址"><span className="mono-chip">{webhookUrl}</span></td>
+                          <td data-label="操作">
                             <div className="row-actions">
                               <Button type="button" variant="secondary" size="sm" onClick={() => void copyWebhookUrl(bot.id, webhookBase)}>
                                 {copiedBotId === bot.id ? <Check size={13} /> : <Copy size={13} />}
@@ -583,17 +583,17 @@ export function AdminApp() {
                       const testResult = testResults[inst.id];
                       return (
                         <tr key={inst.id}>
-                          <td><span className="mono-chip">{inst.id}</span></td>
-                          <td>
-                            <div>{inst.baseUrl}</div>
+                          <td data-label="USER CODE"><span className="mono-chip">{inst.id}</span></td>
+                          <td data-label="BASE URL">
+                            <div className="cell-url">{inst.baseUrl}</div>
                             {testResult ? (
                               <div className={`test-result-note${testResult.ok ? "" : " error"}`}>{testResult.text}</div>
                             ) : null}
                           </td>
-                          <td><span className="mono-chip">{inst.imageMode}</span></td>
-                          <td>{inst.label || "—"}</td>
-                          <td><span className={`status-pill ${inst.enabled ? "on" : "off"}`}>{inst.enabled ? "启用" : "禁用"}</span></td>
-                          <td>
+                          <td data-label="出图模式"><span className="mono-chip">{inst.imageMode}</span></td>
+                          <td data-label="备注"><span className="cell-text">{inst.label || "—"}</span></td>
+                          <td data-label="状态"><span className={`status-pill ${inst.enabled ? "on" : "off"}`}>{inst.enabled ? "启用" : "禁用"}</span></td>
+                          <td data-label="操作">
                             <div className="row-actions">
                               <Button
                                 type="button"
@@ -690,33 +690,35 @@ export function AdminApp() {
                   <tbody>
                     {bindings.map((b) => (
                       <tr key={`${b.botId}:${b.scene}:${b.openid}`}>
-                        <td><span className="mono-chip">{b.botId}</span></td>
-                        <td>{b.scene.toUpperCase()}</td>
-                        <td><span className="mono-chip">{b.openid}</span></td>
-                        <td><span className="mono-chip">{b.instanceId}</span></td>
-                        <td>{new Date(b.updatedAt).toLocaleString("zh-CN", { hour12: false })}</td>
-                        <td>
-                          <Button
-                            type="button"
-                            variant="danger"
-                            size="sm"
-                            onClick={() => setConfirmState({
-                              title: "解除 QQ 绑定",
-                              description: `确认解除 OpenID「${b.openid}」与实例「${b.instanceId}」的绑定吗？`,
-                              actionLabel: "确认解绑",
-                              onConfirm: async () => {
-                                await apiFetch(
-                                  `/admin/bindings/${encodeURIComponent(b.botId)}/${encodeURIComponent(b.scene)}/${encodeURIComponent(b.openid)}`,
-                                  { method: "DELETE" },
-                                );
-                                setBindNotice({ text: `已解除 ${b.openid} 的绑定。`, ok: true });
-                                await loadDashboard();
-                              },
-                            })}
-                          >
-                            <Unlink size={13} />
-                            解绑
-                          </Button>
+                        <td data-label="BOT ID"><span className="mono-chip">{b.botId}</span></td>
+                        <td data-label="场景"><span className="cell-text">{b.scene.toUpperCase()}</span></td>
+                        <td data-label="USER OPENID"><span className="mono-chip">{b.openid}</span></td>
+                        <td data-label="目标 USER CODE"><span className="mono-chip">{b.instanceId}</span></td>
+                        <td data-label="更新时间"><span className="cell-text">{new Date(b.updatedAt).toLocaleString("zh-CN", { hour12: false })}</span></td>
+                        <td data-label="操作">
+                          <div className="row-actions">
+                            <Button
+                              type="button"
+                              variant="danger"
+                              size="sm"
+                              onClick={() => setConfirmState({
+                                title: "解除 QQ 绑定",
+                                description: `确认解除 OpenID「${b.openid}」与实例「${b.instanceId}」的绑定吗？`,
+                                actionLabel: "确认解绑",
+                                onConfirm: async () => {
+                                  await apiFetch(
+                                    `/admin/bindings/${encodeURIComponent(b.botId)}/${encodeURIComponent(b.scene)}/${encodeURIComponent(b.openid)}`,
+                                    { method: "DELETE" },
+                                  );
+                                  setBindNotice({ text: `已解除 ${b.openid} 的绑定。`, ok: true });
+                                  await loadDashboard();
+                                },
+                              })}
+                            >
+                              <Unlink size={13} />
+                              解绑
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))}
