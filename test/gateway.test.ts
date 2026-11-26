@@ -168,6 +168,9 @@ describe("gateway multi-bot & multi-instance routing", () => {
         if (url.pathname === "/api/bot/b50") {
           return Response.json(b50Fixture("snap-alice"));
         }
+        if (url.pathname === "/api/bot/profile") {
+          return Response.json({ userCode: "123456789", name: "Alice", rating: 12.654 });
+        }
         if (url.pathname.startsWith("/api/bot/media/")) {
           return new Response(new Uint8Array([137, 80, 78, 71]), {
             status: 200,
@@ -412,11 +415,14 @@ describe("gateway multi-bot & multi-instance routing", () => {
     const createInst = await app.request("/admin/instances", {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
-      body: JSON.stringify({ id: "alice", baseUrl: "https://alice.workers.dev", bridgeSecret: "alice-secret" }),
+      body: JSON.stringify({ baseUrl: "https://alice.workers.dev", bridgeSecret: "alice-secret" }),
     });
     expect(createInst.status).toBe(201);
+    const createdInst = await createInst.json() as { instance: { id: string; label: string } };
+    expect(createdInst.instance.id).toBe("123456789");
+    expect(createdInst.instance.label).toBe("Alice");
 
-    const testConn = await app.request("/admin/instances/alice/test", {
+    const testConn = await app.request("/admin/instances/123456789/test", {
       method: "POST",
       headers: { cookie },
     });

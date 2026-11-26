@@ -204,10 +204,10 @@ export function renderAdminHtml(): string {
 
       <section class="card">
         <h2>2. Workers 实例配置（arconline-ext）</h2>
-        <p class="muted">登记要接入的面板地址与对应 Worker 的 <code>BOT_BRIDGE_SECRET</code>，绑定时使用 <code>/bind &lt;实例ID&gt;:&lt;绑定码&gt;</code>。</p>
+        <p class="muted">填写面板地址与 <code>BOT_BRIDGE_SECRET</code>，默认自动读取实例的 Arcaea <code>userCode</code> 作为 ID，绑定时使用 <code>/bind &lt;UserCode&gt;:&lt;绑定码&gt;</code>。</p>
         <form id="instanceForm">
           <div class="form-grid">
-            <label>实例 ID<input id="instId" required pattern="[A-Za-z0-9_-]{1,64}" placeholder="例如 alice" /></label>
+            <label>User Code（留空自动读取）<input id="instId" pattern="[A-Za-z0-9_-]{1,64}" placeholder="留空自动读取好友码" /></label>
             <label>Base URL<input id="instUrl" type="url" required placeholder="https://arc.moeblue.top" /></label>
             <label>BOT_BRIDGE_SECRET<input id="instSecret" type="password" required placeholder="对应 Worker Secret" /></label>
             <label>出图模式
@@ -217,7 +217,7 @@ export function renderAdminHtml(): string {
                 <option value="custom">custom（预留自绘）</option>
               </select>
             </label>
-            <label>备注名称（可选）<input id="instLabel" placeholder="例如 主号" /></label>
+            <label>备注名称（可选）<input id="instLabel" placeholder="留空自动填玩家名" /></label>
           </div>
           <button type="submit">保存实例</button>
           <div id="instMsg" class="notice hidden"></div>
@@ -225,7 +225,7 @@ export function renderAdminHtml(): string {
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>实例 ID</th><th>地址</th><th>模式</th><th>备注</th><th>状态</th><th>操作</th></tr>
+              <tr><th>User Code</th><th>地址</th><th>模式</th><th>备注</th><th>状态</th><th>操作</th></tr>
             </thead>
             <tbody id="instancesTable"></tbody>
           </table>

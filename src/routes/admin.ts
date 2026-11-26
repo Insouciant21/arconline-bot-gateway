@@ -201,19 +201,44 @@ export function createAdminRoutes(deps: AdminRoutesDeps) {
       enabled?: unknown;
     };
     try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON" }, 400); }
-    const id = typeof body.id === "string" ? body.id.trim() : "";
-    const baseUrl = typeof body.baseUrl === "string" ? body.baseUrl.trim() : "";
+    let id = typeof body.id === "string" ? body.id.trim() : "";
+    const baseUrl = typeof body.baseUrl === "string" ? body.baseUrl.trim().replace(/\/+$/, "") : "";
     const bridgeSecret = typeof body.bridgeSecret === "string" ? body.bridgeSecret.trim() : "";
     const imageMode = typeof body.imageMode === "string" ? body.imageMode : "official";
-    if (!VALID_ID.test(id) || !/^https?:\/\//.test(baseUrl) || !bridgeSecret || !VALID_MODES.has(imageMode as ImageMode)) {
+    if ((id && !VALID_ID.test(id)) || !/^https?:\/\//.test(baseUrl) || !bridgeSecret || !VALID_MODES.has(imageMode as ImageMode)) {
       return c.json({ error: "Invalid instance payload" }, 400);
     }
+
+    let autoLabel: string | null = null;
+    if (!id) {
+      try {
+        const profile = await deps.bridge.getProfile({
+          id: "pending",
+          baseUrl,
+          bridgeSecret,
+          imageMode: imageMode as ImageMode,
+          label: null,
+          enabled: true,
+          createdAt: "",
+        });
+        const resolved = profile.userCode?.trim() ?? "";
+        if (!VALID_ID.test(resolved)) {
+          return c.json({ error: "该实例尚未同步到有效的 Arcaea userCode，请先在面板同步一次或手动填写。" }, 400);
+        }
+        id = resolved;
+        autoLabel = profile.name?.trim() || null;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "无法读取实例 userCode";
+        return c.json({ error: `自动识别 userCode 失败：${message}` }, 400);
+      }
+    }
+
     const saved = deps.repo.upsertInstance({
       id,
       baseUrl,
       bridgeSecret,
       imageMode: imageMode as ImageMode,
-      label: typeof body.label === "string" ? body.label.trim() || null : null,
+      label: typeof body.label === "string" ? (body.label.trim() || autoLabel) : autoLabel,
       enabled: typeof body.enabled === "boolean" ? body.enabled : true,
     });
     return c.json({

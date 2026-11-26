@@ -53,10 +53,10 @@ export class CommandDispatcher {
     if (cmd === "/help" || cmd === "help" || cmd === "/start") {
       await replyText([
         "ArcOnline QQ Bot 指令：",
-        "/bind <实例ID>:<绑定码>  绑定你的面板实例",
-        "/b50                   同步并发送最新 B50 图片与摘要",
-        "/b50 text              同步并发送纯文本 B50",
-        "/unbind                解除当前绑定",
+        "/bind <UserCode>:<绑定码>  绑定你的面板实例",
+        "/b50                      同步并发送最新 B50 图片与摘要",
+        "/b50 text                 同步并发送纯文本 B50",
+        "/unbind                   解除当前绑定",
       ].join("\n"));
       return;
     }
@@ -89,7 +89,7 @@ export class CommandDispatcher {
   ) {
     const trimmed = rawArg.trim();
     if (!trimmed) {
-      await replyText("格式错误，请发送：/bind <实例ID>:<绑定码>");
+      await replyText("格式错误，请发送：/bind <UserCode>:<绑定码>");
       return;
     }
 
@@ -107,17 +107,17 @@ export class CommandDispatcher {
       if (enabled.length === 1) {
         instance = this.deps.repo.getInstance(enabled[0].id);
       } else {
-        await replyText("当前网关有多个实例，请使用完整格式：/bind <实例ID>:<绑定码>");
+        await replyText("当前网关有多个实例，请使用完整格式：/bind <UserCode>:<绑定码>");
         return;
       }
     }
 
     if (!instance || !instance.enabled) {
-      await replyText("未找到对应的可用实例，请检查实例 ID 后重试。");
+      await replyText("未找到对应的可用实例，请检查 UserCode 后重试。");
       return;
     }
     if (!code) {
-      await replyText("绑定码不能为空，请重新生成后发送 /bind <实例ID>:<绑定码>");
+      await replyText("绑定码不能为空，请重新生成后发送 /bind <UserCode>:<绑定码>");
       return;
     }
 
@@ -144,7 +144,7 @@ export class CommandDispatcher {
   ) {
     const binding = this.deps.repo.getBinding(bot.id, "c2c", openid);
     if (!binding) {
-      await replyText("你还没有绑定 ArcOnline 实例。请先在面板生成绑定码，并发送 /bind <实例ID>:<绑定码>。");
+      await replyText("你还没有绑定 ArcOnline 实例。请先在面板生成绑定码，并发送 /bind <UserCode>:<绑定码>。");
       return;
     }
     const instance = this.deps.repo.getInstance(binding.instanceId);

@@ -69,6 +69,14 @@ export class WorkersBridgeClient {
     });
   }
 
+  async getProfile(instance: InstanceRecord) {
+    return this.requestJson<{
+      userCode: string | null;
+      name: string | null;
+      rating: number;
+    }>(instance, "/api/bot/profile");
+  }
+
   async triggerSync(instance: InstanceRecord) {
     return this.requestJson<{ jobId: string; status: string; job: BotJobPayload }>(
       instance,
