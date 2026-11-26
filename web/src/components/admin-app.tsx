@@ -405,11 +405,6 @@ export function AdminApp() {
           </span>
         </a>
         <div className="topbar-right">
-          <nav className="nav-pills" aria-label="快速导航">
-            <a href="#bots">QQ BOTS</a>
-            <a href="#instances">WORKERS</a>
-            <a href="#bindings">BINDINGS</a>
-          </nav>
           <Button type="button" variant="secondary" size="sm" onClick={() => void loadDashboard()} disabled={refreshing}>
             <RefreshCw size={13} className={refreshing ? "spin" : undefined} />
             刷新
