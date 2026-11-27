@@ -34,8 +34,13 @@ export function createWebhookRoutes(deps: WebhookRouterDeps) {
     const rawBody = await c.req.text();
     const signature = c.req.header("x-signature-ed25519");
     const timestamp = c.req.header("x-signature-timestamp");
+    const signatureValid = Boolean(
+      signature &&
+      timestamp &&
+      verifyWebhookSignature(bot.clientSecret, timestamp, signature, rawBody),
+    );
 
-    if (signature && !verifyWebhookSignature(bot.clientSecret, timestamp, signature, rawBody)) {
+    if (signature && !signatureValid) {
       return c.json({ error: "Invalid signature" }, 401);
     }
 
@@ -65,11 +70,9 @@ export function createWebhookRoutes(deps: WebhookRouterDeps) {
     }
 
     if (
-      !signature ||
-      !timestamp ||
-      !VALID_UNIX_TS.test(timestamp) ||
-      Math.abs(nowSeconds() - Number(timestamp)) > MAX_WEBHOOK_SKEW_SECONDS ||
-      !verifyWebhookSignature(bot.clientSecret, timestamp, signature, rawBody)
+      !signatureValid ||
+      !VALID_UNIX_TS.test(timestamp!) ||
+      Math.abs(nowSeconds() - Number(timestamp)) > MAX_WEBHOOK_SKEW_SECONDS
     ) {
       return c.json({ error: "Missing, expired or invalid signature" }, 401);
     }

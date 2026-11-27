@@ -38,11 +38,12 @@ export class CommandDispatcher {
     let seq = 0;
     const nextSeq = () => ++seq;
     const replyText = async (content: string) => {
+      const msgSeq = nextSeq();
       await this.deps.qq.sendC2CMessage(bot, openid, {
         msgType: 0,
         content,
         msgId,
-        msgSeq: nextSeq(),
+        msgSeq,
       });
     };
 
@@ -195,7 +196,8 @@ export class CommandDispatcher {
     notifyPending: () => Promise<void>,
   ): Promise<{ note?: string; failedReason?: string }> {
     const startedAt = Date.now();
-    let notified = false;
+    const fastPollIntervalMs = Math.min(this.deps.config.syncPollIntervalMs, 800);
+    let pendingNotice: Promise<void> | undefined;
     let consecutivePollErrors = 0;
 
     try {
@@ -204,18 +206,19 @@ export class CommandDispatcher {
 
       while (job.status === "queued" || job.status === "running") {
         const elapsed = Date.now() - startedAt;
-        if (!notified && elapsed >= PROGRESS_NOTICE_DELAY_MS) {
-          notified = true;
-          await notifyPending().catch((err) => console.warn("[gateway] progress notice failed:", err));
+        if (!pendingNotice && elapsed >= PROGRESS_NOTICE_DELAY_MS) {
+          // Reserve msgSeq synchronously and send in parallel so QQ RTT never stalls polling.
+          pendingNotice = notifyPending().catch((err) => console.warn("[gateway] progress notice failed:", err));
         }
         if (elapsed >= this.deps.config.syncPollTimeoutMs) {
           const reason = "同步等待超时";
+          if (pendingNotice) await pendingNotice;
           return {
             note: `同步超时，已回退发送最近一次缓存 B50。`,
             failedReason: reason,
           };
         }
-        await this.sleep(this.deps.config.syncPollIntervalMs);
+        await this.sleep(elapsed < 10_000 ? fastPollIntervalMs : this.deps.config.syncPollIntervalMs);
         try {
           job = await this.deps.bridge.getJob(instance, started.jobId);
           consecutivePollErrors = 0;
@@ -224,6 +227,8 @@ export class CommandDispatcher {
           if (consecutivePollErrors >= 3) throw pollError;
         }
       }
+
+      if (pendingNotice) await pendingNotice;
 
       if (job.status === "failed") {
         const reason = job.error || "同步任务失败";
@@ -238,6 +243,7 @@ export class CommandDispatcher {
       }
       return { note: "已同步最新 B50。" };
     } catch (error) {
+      if (pendingNotice) await pendingNotice;
       const reason = error instanceof Error ? error.message : "同步请求异常";
       return {
         note: `同步失败（${reason}），已回退发送最近一次缓存 B50。`,
