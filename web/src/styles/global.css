@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@500;700&family=Open+Sans:wght@400;600;700&family=Titillium+Web:wght@400;600;700&family=Exo:wght@700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@500;700&family=Open+Sans:wght@400;600;700&family=Titillium+Web:wght@400;600;700&family=Exo:wght@700&display=swap");
 
 :root {
   --page: #f8f8f9;
@@ -20,6 +20,7 @@
   --font-body: "Open Sans", "Noto Sans SC", sans-serif;
   --font-heading: "Titillium Web", "Noto Sans SC", sans-serif;
   --font-number: "Exo", "Open Sans", "Noto Sans SC", sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, "SF Mono", Menlo, Monaco, "Liberation Mono", monospace;
 }
 
 * { box-sizing: border-box; }
@@ -60,6 +61,10 @@ h1, h2, h3, h4, button, .brand, .section-kicker, .hexagon-title,
 }
 
 h1, h2, h3, h4 { font-weight: 700; }
+
+code, kbd, pre, samp {
+  font-family: var(--font-mono);
+}
 
 button:focus-visible, input:focus-visible, select:focus-visible {
   outline: 2px solid var(--purple);
@@ -192,7 +197,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 }
 .auth-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .auth-eyebrow { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--cyan-deep); font-size: 9px; letter-spacing: .19em; }
-.auth-index { color: var(--muted-2); font-family: monospace; font-size: 9px; letter-spacing: .08em; }
+.auth-index { color: var(--muted-2); font-family: var(--font-mono); font-size: 9px; letter-spacing: .08em; }
 .auth-panel h1 { margin: 20px 0 0; color: var(--ink); font-size: clamp(27px, 6vw, 38px); letter-spacing: -.04em; line-height: 1.15; }
 .auth-description { max-width: 360px; margin: 14px 0 0; color: var(--muted); font-size: 12px; line-height: 1.8; }
 .login-form { display: grid; gap: 14px; margin-top: 26px; }
@@ -392,8 +397,9 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   border: 1px solid rgba(99, 84, 184, .2);
   background: #f2effa;
   color: var(--purple);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
+  font-weight: 500;
   overflow-wrap: anywhere;
   word-break: break-all;
 }
