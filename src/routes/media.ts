@@ -26,6 +26,7 @@ export function createMediaRoutes(deps: {
         status: 200,
         headers: {
           "content-type": media.contentType,
+          "content-length": String(media.body.byteLength),
           "cache-control": "private, no-store",
         },
       });

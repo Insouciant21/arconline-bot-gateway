@@ -98,12 +98,14 @@ describe("gateway multi-bot & multi-instance routing", () => {
 
   function setupGateway(opts: {
     syncBehavior?: "recorded" | "unchanged" | "fail";
+    failUrlUploadOnce?: boolean;
     config?: Partial<GatewayConfig>;
   } = {}) {
     const sentQqCalls: Array<{ path: string; body: Record<string, unknown> }> = [];
     const bridgeCalls: Array<{ url: string; method: string }> = [];
     const pendingTasks: Promise<void>[] = [];
     let pollCount = 0;
+    let urlUploadFailed = false;
 
     const fakeFetch: typeof fetch = async (input, init) => {
       const req = new Request(input, init);
@@ -118,6 +120,13 @@ describe("gateway multi-bot & multi-instance routing", () => {
         const body = JSON.parse(await req.text()) as Record<string, unknown>;
         sentQqCalls.push({ path: url.pathname, body });
         if (url.pathname.endsWith("/files")) {
+          if (opts.failUrlUploadOnce && !urlUploadFailed && typeof body.url === "string") {
+            urlUploadFailed = true;
+            return Response.json(
+              { message: "富媒体文件上传超时", code: 850027, err_code: 40034003 },
+              { status: 400 },
+            );
+          }
           return Response.json({ file_info: "file-info-xyz" });
         }
         return Response.json({ id: `qq-msg-${sentQqCalls.length}` });
@@ -409,7 +418,34 @@ describe("gateway multi-bot & multi-instance routing", () => {
     const proxyPath = new URL(sentQqCalls[0].body.url as string).pathname;
     const mediaRes = await app.request(proxyPath);
     expect(mediaRes.status).toBe(200);
+    expect(mediaRes.headers.get("content-length")).toBe("4");
     expect(sentQqCalls[1].body.msg_type).toBe(7);
+  });
+
+  it("retries the same custom B50 image via direct file_data when QQ URL upload times out", async () => {
+    const { app, repo, sentQqCalls, bridgeCalls, flushBackground } = setupGateway({
+      syncBehavior: "unchanged",
+      failUrlUploadOnce: true,
+    });
+    repo.upsertBot({ id: "bot-d", appId: "1003", clientSecret: "secret-d" });
+    repo.upsertInstance({ id: "alice", baseUrl: "https://alice.workers.dev", bridgeSecret: "alice-secret", imageMode: "custom" });
+    repo.setBinding("bot-d", "c2c", "user-1", "alice");
+
+    await app.request(makeSignedWebhookRequest("bot-d", "secret-d", {
+      op: 0,
+      id: "evt-b50-url-timeout",
+      t: "C2C_MESSAGE_CREATE",
+      d: { id: "msg-retry", content: "/b50", timestamp: "2026-11-27T01:04:00Z", author: { user_openid: "user-1" } },
+    }));
+    await flushBackground();
+
+    // Expect: 1) failed URL upload for custom, 2) direct file_data upload for the SAME custom key, 3) message send
+    expect(sentQqCalls).toHaveLength(3);
+    expect(typeof sentQqCalls[0].body.url).toBe("string");
+    expect(typeof sentQqCalls[1].body.file_data).toBe("string");
+    expect(sentQqCalls[2].body.msg_type).toBe(7);
+    expect(bridgeCalls.some((call) => call.url.includes("/api/bot/media/custom/"))).toBe(true);
+    expect(bridgeCalls.some((call) => call.url.includes("/api/bot/media/potential/"))).toBe(false);
   });
 
   it("serves /admin UI, supports cookie login/logout, patch, and instance connectivity check", async () => {

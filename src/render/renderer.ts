@@ -100,10 +100,14 @@ async function uploadB50Image(options: DeliverB50Options, key: string): Promise<
   if (options.config.publicBaseUrl) {
     const token = options.mediaSigner.sign(options.instance.id, key);
     const url = `${options.config.publicBaseUrl}/qq/media/${token}`;
-    return options.qq.uploadC2CFile(options.bot, options.openid, {
-      fileType: 1,
-      url,
-    });
+    try {
+      return await options.qq.uploadC2CFile(options.bot, options.openid, {
+        fileType: 1,
+        url,
+      });
+    } catch (error) {
+      console.warn(`[gateway] URL media upload failed for ${key}, retrying via direct file_data:`, error);
+    }
   }
 
   const media = await options.bridge.fetchMedia(options.instance, key);
