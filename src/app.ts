@@ -8,7 +8,6 @@ import { GatewayRepository } from "./db/repositories.js";
 import { QqApiClient } from "./qq/client.js";
 import { QqTokenManager } from "./qq/token.js";
 import { MediaProxySigner } from "./render/media-proxy.js";
-import type { CustomB50Renderer } from "./render/renderer.js";
 import { createAdminRoutes } from "./routes/admin.js";
 import { createMediaRoutes } from "./routes/media.js";
 import { createWebhookRoutes } from "./routes/webhook.js";
@@ -17,7 +16,6 @@ export interface GatewayAppOptions {
   config: GatewayConfig;
   db?: DatabaseSync;
   fetchImpl?: typeof fetch;
-  customRenderer?: CustomB50Renderer;
   sleep?: (ms: number) => Promise<void>;
   scheduleBackground?: (task: Promise<void>) => void;
 }
@@ -35,7 +33,6 @@ export function createGatewayApp(options: GatewayAppOptions) {
     bridge,
     qq,
     mediaSigner,
-    customRenderer: options.customRenderer,
     sleep: options.sleep,
   });
 

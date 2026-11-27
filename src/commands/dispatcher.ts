@@ -5,7 +5,7 @@ import type { BotRecord, GatewayRepository, InstanceRecord } from "../db/reposit
 import type { QqApiClient } from "../qq/client.js";
 import type { QqC2CMessageData } from "../qq/types.js";
 import type { MediaProxySigner } from "../render/media-proxy.js";
-import { deliverB50Reply, type CustomB50Renderer } from "../render/renderer.js";
+import { deliverB50Reply } from "../render/renderer.js";
 
 const PROGRESS_NOTICE_DELAY_MS = 2500;
 
@@ -15,7 +15,6 @@ export interface DispatcherDeps {
   bridge: WorkersBridgeClient;
   qq: QqApiClient;
   mediaSigner: MediaProxySigner;
-  customRenderer?: CustomB50Renderer;
   sleep?: (ms: number) => Promise<void>;
 }
 
@@ -175,7 +174,6 @@ export class CommandDispatcher {
         bridge: this.deps.bridge,
         qq: this.deps.qq,
         mediaSigner: this.deps.mediaSigner,
-        customRenderer: this.deps.customRenderer,
       });
     } catch (error) {
       if (error instanceof WorkersBridgeError && error.status === 404) {

@@ -7,10 +7,6 @@ import type { MediaProxySigner } from "./media-proxy.js";
 
 const MAX_DIRECT_UPLOAD_BYTES = 5 * 1024 * 1024;
 
-export interface CustomB50Renderer {
-  render(b50: BotB50Payload, instance: InstanceRecord): Promise<{ body: ArrayBuffer; contentType: string }>;
-}
-
 export interface DeliverB50Options {
   bot: BotRecord;
   openid: string;
@@ -24,7 +20,6 @@ export interface DeliverB50Options {
   bridge: WorkersBridgeClient;
   qq: QqApiClient;
   mediaSigner: MediaProxySigner;
-  customRenderer?: CustomB50Renderer;
 }
 
 export async function deliverB50Reply(options: DeliverB50Options): Promise<void> {
@@ -34,28 +29,6 @@ export async function deliverB50Reply(options: DeliverB50Options): Promise<void>
   if (mode === "custom" && options.b50.customImageKey) {
     if (await trySendStoredImage(options, options.b50.customImageKey, summary, "custom")) {
       return;
-    }
-  }
-
-  if (mode === "custom" && options.customRenderer) {
-    try {
-      const rendered = await options.customRenderer.render(options.b50, options.instance);
-      if (rendered.body.byteLength <= MAX_DIRECT_UPLOAD_BYTES) {
-        const fileInfo = await options.qq.uploadC2CFile(options.bot, options.openid, {
-          fileType: 1,
-          fileData: Buffer.from(rendered.body).toString("base64"),
-        });
-        await options.qq.sendC2CMessage(options.bot, options.openid, {
-          msgType: 7,
-          media: { file_info: fileInfo },
-          content: summary,
-          msgId: options.msgId,
-          msgSeq: options.nextSeq(),
-        });
-        return;
-      }
-    } catch (error) {
-      console.warn("[gateway] custom B50 render/upload failed, falling back:", error);
     }
   }
 
